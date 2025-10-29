@@ -508,16 +508,14 @@ canvas {
    App state
 ------------------------- */
 const appState = {
-  step: 1,
-  verified: false,
-  user: null,
-  signatureDataUrl: null,
-  votes: {},
   resolutions: [
-    { id: 'res1', title: 'Approval of previous minutes', type: 'Ordinary (50%)' },
-    { id: 'res2', title: 'Appointment of auditor', type: 'Special (2/3)' },
+    { id: 'res1', title: 'Approval of previous minutes' },
+    { id: 'res2', title: 'Appointment of auditor' },
+    // Add more here dynamically
   ],
-  registeredUsers: [] // now fetched from Google Sheets
+  votes: {},
+  user: null,
+  signatureDataUrl: null
 };
 
 // Your Google Apps Script Web App URL
@@ -713,34 +711,33 @@ document.getElementById('confirmSig').addEventListener('click', ()=>{
    Voting
 ------------------------- */
 function renderResolutions(){
-  resolutionsList.innerHTML = '';
+  const container = document.getElementById('resolutionsList');
+  container.innerHTML = '';
   appState.votes = {};
-  appState.resolutions.forEach(r=>{
+  
+  appState.resolutions.forEach(r => {
     const div = document.createElement('div');
     div.className = 'vote-card';
     div.innerHTML = `
-      <div style="max-width:70%">
-        <div style="font-weight:700">${r.title}</div>
-        <div class="small muted">${r.type}</div>
-      </div>
+      <div style="max-width:70%"><strong>${r.title}</strong></div>
       <div class="vote-options">
         <button class="vote-btn" data-res="${r.id}" data-val="agree">Agree</button>
         <button class="vote-btn" data-res="${r.id}" data-val="against">Against</button>
       </div>
     `;
-    resolutionsList.appendChild(div);
+    container.appendChild(div);
   });
+
   document.querySelectorAll('.vote-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const res = btn.getAttribute('data-res');
-      const val = btn.getAttribute('data-val');
+      const res = btn.dataset.res;
+      const val = btn.dataset.val;
       appState.votes[res] = val;
       document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b=>b.classList.remove('selected'));
       document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b=>b.classList.add('selected'));
-      validateAllVotes();
+      document.getElementById('submitVotes').disabled = Object.keys(appState.votes).length !== appState.resolutions.length;
     });
   });
-  document.getElementById('submitVotes').disabled = true;
 }
 
 function validateAllVotes(){
@@ -829,5 +826,3 @@ window.addEventListener("DOMContentLoaded", () => {
   </script>
 </body>
 </html>
-
-
