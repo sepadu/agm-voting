@@ -6,7 +6,6 @@
   <title>AGM — Attendance & Voting (v2.6)</title>
 
   <!-- Libraries -->
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -809,63 +808,22 @@ boot();
 
 
 /* -------------------------
-   QR SCANNER INIT
+   QR URL AUTO-FILL MODE
 ------------------------- */
-function initQrScanner() {
-  const qrRegionId = "qr-reader";
+window.addEventListener("DOMContentLoaded", () => {
+  // Hide the camera box since we're using URL QR codes instead
+  const qrReader = document.getElementById("qr-reader");
+  if (qrReader) qrReader.style.display = "none";
 
-  // Make sure the element exists
-  const qrReaderEl = document.getElementById(qrRegionId);
-  if (!qrReaderEl) return;
+  const urlParams = new URLSearchParams(window.location.search);
+  const scannedId = urlParams.get("id");
 
-  // Create new QR code scanner instance
-  const html5QrCode = new Html5Qrcode(qrRegionId);
-
-  // Start the camera and listen for scans
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras && cameras.length) {
-      const camId = cameras[0].id; // use first available camera
-      html5QrCode.start(
-        camId,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
-        (decodedText) => {
-          // When QR detected, put value into IC field
-          console.log("✅ QR Detected:", decodedText);
-          document.getElementById('icInput').value = decodedText;
-          document.getElementById('qr-loading').textContent = "QR detected!";
-          html5QrCode.stop();
-        },
-        (errorMsg) => {
-          // ignore decode errors for smoother scanning
-        }
-      ).catch(err => {
-        console.error("Camera start failed:", err);
-        document.getElementById('qr-loading').textContent = "Failed to start camera. Please check browser permissions.";
-      });
-    } else {
-      document.getElementById('qr-loading').textContent = "No camera found.";
-    }
-  }).catch(err => {
-    console.error("Camera error:", err);
-    document.getElementById('qr-loading').textContent = "Unable to access camera.";
-  });
-}
-
-window.addEventListener("load", () => {
-  // Wait until QR library is ready
-  if (typeof Html5Qrcode !== "undefined") {
-    initQrScanner();
+  if (scannedId) {
+    const icInput = document.getElementById("icInput");
+    icInput.value = scannedId;
+    document.getElementById("qr-loading").textContent = "QR data loaded from link ✅";
   } else {
-    console.warn("⏳ Waiting for Html5Qrcode library...");
-    const interval = setInterval(() => {
-      if (typeof Html5Qrcode !== "undefined") {
-        clearInterval(interval);
-        initQrScanner();
-      }
-    }, 300);
+    document.getElementById("qr-loading").textContent = "Please scan using QR link (no camera needed).";
   }
 });
   </script>
