@@ -854,8 +854,20 @@ function initQrScanner() {
   });
 }
 
-// ✅ Start scanner once the page is ready
-window.addEventListener("load", initQrScanner);
+window.addEventListener("load", () => {
+  // Wait until QR library is ready
+  if (typeof Html5Qrcode !== "undefined") {
+    initQrScanner();
+  } else {
+    console.warn("⏳ Waiting for Html5Qrcode library...");
+    const interval = setInterval(() => {
+      if (typeof Html5Qrcode !== "undefined") {
+        clearInterval(interval);
+        initQrScanner();
+      }
+    }, 300);
+  }
+});
   </script>
 </body>
 </html>
