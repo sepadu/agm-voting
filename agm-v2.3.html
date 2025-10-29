@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AGM — Attendance & Voting (v2.6)</title>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+/* ===========================================
+   🎨 GLOBAL VARIABLES & BASE STYLE
+=========================================== */
+:root {
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --accent: #0b66d0;
+  --muted: #6b7280;
+  --success: #16a34a;
+  --danger: #dc3545;
+  --radius: 10px;
+
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: #0f1724;
+}
+
+/* ===========================================
+   🧱 MAIN CONTAINER
+=========================================== */
+.wrap {
+  max-width: 960px;
+  margin: 28px auto;
+  padding: 22px;
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(12, 18, 30, 0.06);
+  padding: 22px;
+}
+
+/* ===========================================
+   🧭 HEADER
+=========================================== */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+header h1 {
+  font-size: 20px;
+  margin: 0;
+  color: var(--accent);
+  letter-spacing: 0.2px;
+}
+
+header .top-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Language Toggle Button */
+.lang-btn {
+  background: #eef3fb;
+  color: var(--accent);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+/* ===========================================
+   📊 PROGRESS INDICATOR
+=========================================== */
+.progress-dots {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 500px;
+  margin: 25px auto 35px;
+  position: relative;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #d1d5db;
+  position: relative;
+  transition: background-color 0.4s ease, transform 0.3s ease;
+  z-index: 2;
+}
+
+.dot.active {
+  background-color: var(--accent);
+  transform: scale(1.3);
+}
+
+.line {
+  flex: 1;
+  height: 3px;
+  background: repeating-linear-gradient(
+    to right,
+    #d1d5db,
+    #d1d5db 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated fill effect for completed lines */
+.line::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background-color: var(--accent);
+  transition: left 0.6s ease;
+}
+
+/* Fill animation for lines before active dot */
+.line.active::before {
+  left: 0;
+}
+
+/* Optional labels below dots */
+.dot::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+.dot.active::after {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.step.active {
+  background: linear-gradient(90deg, var(--accent), #2573ff);
+  color: #fff;
+  border: none;
+}
+
+/* ===========================================
+   🧩 LAYOUT & PANELS
+=========================================== */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr 360px;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 600px) {
+  .wrap {
+    padding: 12px;
+  }
+  .card {
+    padding: 14px;
+  }
+}
+
+.panel {
+  background: #fff;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid #eef2f7;
+}
+
+/* ===========================================
+   📝 FORMS
+=========================================== */
+label {
+  display: block;
+  margin: 10px 0 6px;
+  font-weight: 600;
+  color: #0f1724;
+  font-size: 13px;
+}
+
+input[type=text],
+select,
+button {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #dbe7fb;
+  font-size: 14px;
+}
+
+/* Muted / Small Text */
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ===========================================
+   📸 QR BOX
+=========================================== */
+.qr-box {
+  border: 1px dashed #e6eefc;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fcfeff;
+}
+
+/* ===========================================
+   ⚙️ BUTTONS
+=========================================== */
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.btn.secondary {
+  background: #eef3fb;
+  color: var(--accent);
+  border: 1px solid #d6e9ff;
+  font-weight: 700;
+}
+
+/* ===========================================
+   📢 STATUS / ALERT BOXES
+=========================================== */
+.status {
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 12px;
+  font-weight: 700;
+}
+
+.status.ok {
+  background: #ecfdf3;
+  border: 1px solid #bbf7d0;
+  color: var(--success);
+}
+
+.status.fail {
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  color: var(--danger);
+}
+
+/* ===========================================
+   🗳 VOTING CARDS
+=========================================== */
+.vote-card {
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vote-options {
+  display: flex;
+  gap: 10px;
+}
+
+.vote-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #dbe7fb;
+  cursor: pointer;
+  background: #fff;
+  font-weight: 700;
+}
+
+.vote-btn.selected {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+
+/* ===========================================
+   ✍️ SIGNATURE PAD & SUMMARY
+=========================================== */
+canvas {
+  width: 100%;
+  height: 140px;
+  border-radius: 8px;
+  border: 1px solid #e6eefc;
+  background: #fbfdff;
+}
+
+.summary {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #eef2f7;
+}
+
+/* ===========================================
+   💬 MODAL (POPUP)
+=========================================== */
+.modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 20, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background: #fff;
+  padding: 18px;
+  border-radius: 10px;
+  max-width: 420px;
+  width: 92%;
+  box-shadow: 0 8px 30px rgba(11, 22, 38, 0.12);
+}
+
+.hide {
+  display: none;
+}
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <div>
+          <h1 id="appTitle">AGM Attendance & Voting</h1>
+          <div class="muted" id="appDesc">Corporate & Minimal prototype</div>
+        </div>
+        <div class="top-actions">
+          <!-- Text-only language toggle (resets on reload) -->
+          <button class="lang-btn" id="langToggle">BM</button>
+        </div>
+      </header>
+
+<!-- Progress (Animated Minimal Dotted Line) -->
+<div class="progress-dots">
+  <div class="dot active" data-label="Attendance"></div>
+  <div class="line"></div>
+  <div class="dot" data-label="Signature"></div>
+  <div class="line"></div>
+  <div class="dot" data-label="Voting"></div>
+  <div class="line"></div>
+  <div class="dot" data-label="Result"></div>
+</div>
+
+      <div class="layout">
+        <!-- Main flow -->
+        <div id="mainFlow">
+          <!-- Step 1: Attendance -->
+          <section class="panel" id="step-1">
+            <h3 style="margin:0 0 8px" id="titleAttendance">Attendance</h3>
+            <div class="small muted" id="descAttendance">Scan QR from invitation or type IC/Passport manually</div>
+
+            <label id="lblScan">Scan QR (camera)</label>
+            <div id="qr-reader" class="qr-box" style="height:260px;display:flex;align-items:center;justify-content:center">
+              <div id="qr-loading">Initializing camera...</div>
+            </div>
+
+            <label for="icInput" id="lblIC">IC / Passport</label>
+            <input id="icInput" type="text" placeholder="e.g. 900101-01-1234 or ATT-900101..." />
+
+            <label for="roleSelect" id="lblRole">Role</label>
+            <select id="roleSelect">
+			<option value="" disabled selected>Please choose role</option>
+              <option value="owner">Owner</option>
+              <option value="proxy">Company Proxy</option>
+            </select>
+
+            <label for="unitInput" id="lblUnit">Unit Number (optional)</label>
+            <input id="unitInput" type="text" placeholder="e.g. B-12-5" />
+
+            <div id="attStatus" class="status hide"></div>
+
+            <div class="actions">
+              <button class="btn secondary" id="confirmManual">Verify Manual</button>
+              <button class="btn" id="nextFromAttendance" disabled>Next ➜</button>
+            </div>
+          </section>
+
+          <!-- Step 2: Signature -->
+          <section class="panel hide" id="step-2">
+            <h3 style="margin:0 0 8px" id="titleSignature">Digital Signature</h3>
+            <div class="small muted" id="descSignature">Please sign inside the box. Signature will be included in the PDF.</div>
+            <canvas id="sigCanvas"></canvas>
+            <div style="display:flex;gap:10px;margin-top:10px">
+              <button class="btn secondary" id="clearSig">Clear</button>
+              <button class="btn" id="confirmSig">Confirm Signature</button>
+            </div>
+          </section>
+
+          <!-- Step 3: Voting -->
+          <section class="panel hide" id="step-3">
+            <h3 style="margin:0 0 8px" id="titleVoting">Voting — Agenda & Resolutions</h3>
+            <div class="small muted" id="descVoting">Select your choice for each resolution.</div>
+
+            <div id="resolutionsList" style="margin-top:12px"></div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+              <div class="small muted">All resolutions must be answered</div>
+              <div>
+                <button class="btn secondary" id="backFromVoting">Back</button>
+                <button class="btn" id="submitVotes" disabled>Submit Votes</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Step 4: Result & Export -->
+          <section class="panel hide" id="step-4">
+            <h3 style="margin:0 0 8px" id="titleResult">Summary & Export</h3>
+            <div class="summary" id="summaryArea"></div>
+            <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end">
+              <button class="btn secondary" id="backFromSummary">Back</button>
+              <button class="btn" id="exportPdfBtn"><i class="fa fa-file-pdf"></i> Export PDF</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Sidebar -->
+        <aside>
+          <div class="panel">
+            <h4 style="margin:0 0 8px">Participant</h4>
+            <div class="small muted" id="sidebarInfo">Awaiting attendance verification</div>
+            <hr style="margin:12px 0;border:none;border-top:1px solid #eef6ff" />
+            <div style="display:flex;gap:10px;align-items:center">
+              <div style="width:44px;height:44px;border-radius:8px;background:#eef7ff;display:flex;align-items:center;justify-content:center;color:var(--accent)">
+                <i class="fa fa-user"></i>
+              </div>
+              <div>
+                <div style="font-weight:700" id="sideName">-</div>
+                <div class="small muted" id="sideRole">-</div>
+                <div class="small muted" id="sideUnit">-</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modalRoot" class="modal-back hide">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div id="modalContent">Message</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button class="btn secondary" onclick="closeModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+/* -------------------------
+   App state
+------------------------- */
+const appState = {
+  step: 1,
+  verified: false,
+  user: null,
+  signatureDataUrl: null,
+  votes: {},
+  resolutions: [
+    { id: 'res1', title: 'Approval of previous minutes', type: 'Ordinary (50%)' },
+    { id: 'res2', title: 'Appointment of auditor', type: 'Special (2/3)' },
+  ],
+  registeredUsers: [] // now fetched from Google Sheets
+};
+
+// Your Google Apps Script Web App URL
+const SHEET_API = "https://script.google.com/macros/s/AKfycbyTt5iBRhHGaFuGX4N206NdYUrsxrlrAyQ8siskJ1lzkiPb3282DFZL7eGRDoSM5F7BQg/exec";
+
+/* DOM refs */
+const stepIndicators = [1,2,3,4].map(i => document.getElementById('stepIndicator'+i));
+const stepEls = {
+  1: document.getElementById('step-1'),
+  2: document.getElementById('step-2'),
+  3: document.getElementById('step-3'),
+  4: document.getElementById('step-4'),
+};
+const nextBtn = document.getElementById('nextFromAttendance');
+const confirmManualBtn = document.getElementById('confirmManual');
+const attStatusEl = document.getElementById('attStatus');
+const sidebarInfo = document.getElementById('sidebarInfo');
+const sideName = document.getElementById('sideName');
+const sideRole = document.getElementById('sideRole');
+const sideUnit = document.getElementById('sideUnit');
+const icInput = document.getElementById('icInput');
+const roleSelect = document.getElementById('roleSelect');
+const unitInput = document.getElementById('unitInput');
+const resolutionsList = document.getElementById('resolutionsList');
+const sigCanvas = document.getElementById('sigCanvas');
+const modalRoot = document.getElementById('modalRoot');
+const modalContent = document.getElementById('modalContent');
+
+/* -------------------------
+   Modal helpers
+------------------------- */
+function showModal(msg){
+  modalContent.innerHTML = `<div style="font-weight:700">${msg}</div>`;
+  modalRoot.classList.remove('hide');
+}
+function closeModal(){ modalRoot.classList.add('hide'); }
+window.closeModal = closeModal;
+
+/* -------------------------
+   Step navigation
+------------------------- */
+function showStep(n){
+  appState.step = n;
+  Object.values(stepEls).forEach(el => el.classList.add('hide'));
+  stepEls[n].classList.remove('hide');
+  document.querySelectorAll('.dot').forEach((dot, idx) => {
+  dot.classList.toggle('active', (idx + 1) <= n);
+});
+}
+
+function setStatus(ok, text){
+  attStatusEl.classList.remove('hide','ok','fail');
+  attStatusEl.classList.toggle('ok', ok);
+  attStatusEl.classList.toggle('fail', !ok);
+  attStatusEl.textContent = text;
+}
+
+function resetSidebar(){
+  sideName.textContent = '-';
+  sideRole.textContent = '-';
+  sideUnit.textContent = '-';
+  sidebarInfo.textContent = 'Awaiting attendance verification';
+}
+
+/* -------------------------
+   Load registered users from Google Sheet
+------------------------- */
+async function loadRegisteredUsers(){
+  try {
+    const res = await fetch(SHEET_API + '?nocache=' + Date.now()); // prevent caching
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+
+    if (!Array.isArray(data) || !data.length) {
+      console.warn("⚠️ No data found in Google Sheet:", data);
+      showModal("No participants found in the Sheet. Please check your tab name 'Participants' and columns.");
+      return;
+    }
+
+    appState.registeredUsers = data;
+    console.log("✅ Loaded users from Google Sheet:", data);
+  } catch (err) {
+    console.error("❌ Failed to load sheet data:", err);
+    showModal("Unable to connect to Google Sheet. Please check script permissions or deployment access.");
+  }
+}
+
+/* -------------------------
+   Attendance Verification
+------------------------- */
+function updateAfterVerify(ok, msg){
+  if(ok){
+    setStatus(true, msg);
+    sidebarInfo.textContent = `${appState.user.name} — ${appState.user.unit}`;
+    sideName.textContent = appState.user.name;
+    sideRole.textContent = appState.user.role;
+    sideUnit.textContent = appState.user.unit;
+    nextBtn.disabled = false;
+  } else {
+    setStatus(false, msg);
+    resetSidebar();
+    nextBtn.disabled = true;
+  }
+}
+
+// Manual verify button
+confirmManualBtn.addEventListener('click', () => {
+  const ic = icInput.value.trim();
+  const role = roleSelect.value.trim();
+  const unit = unitInput.value.trim();
+
+  if (!ic) {
+    showModal("Please enter IC / Passport");
+    return;
+  }
+
+  if (!role) {
+    showModal("⚠️ Please select your role before verifying.");
+    return;
+  }
+
+  const found = appState.registeredUsers.find(u => {
+    const uid = String(u.id || '').trim();
+    const input = String(ic).trim();
+    return uid === input; // ✅ exact match only
+  });
+
+  if (found) {
+    const sheetRole = String(found.role || '').trim().toLowerCase();
+    const inputRole = String(role || '').trim().toLowerCase();
+    const sheetUnit = String(found.unit || '').trim().toLowerCase();
+    const inputUnit = String(unit || '').trim().toLowerCase();
+
+    const roleMatch =
+      (sheetRole.includes('proxy') && inputRole === 'proxy') ||
+      (sheetRole.includes('owner') && inputRole === 'owner');
+
+    const unitMatch = !inputUnit || sheetUnit === inputUnit;
+
+    if (roleMatch && unitMatch) {
+      appState.verified = true;
+      appState.user = { ...found };
+      if (!unit) unitInput.value = found.unit;
+      updateAfterVerify(true, "Manual verification completed ✅");
+      showModal("Manual verification completed ✅");
+	  
+	  
+	  // ✅ Reset the form fields after successful verification
+document.getElementById('icInput').value = '';          // Clear IC/Passport input
+document.getElementById('roleSelect').selectedIndex = 0; // Reset dropdown to "Please choose role"
+document.getElementById('unitInput').value = '';         // Clear unit (if exists)
+    } else {
+      appState.verified = false;
+      appState.user = { ...found, role, unit };
+      updateAfterVerify(false, "Record found but role/unit does not match ❌");
+      showModal(`Found record for ${found.name}, but role or unit doesn't match.`);
+    }
+  } else {
+    appState.verified = false;
+    appState.user = { name: ic, role, unit };
+    updateAfterVerify(false, "Invalid QR / ID. Not registered ❌");
+    showModal("Invalid QR / ID. Not registered ❌");
+  }
+});
+
+// Next from attendance
+nextBtn.addEventListener('click', ()=>{
+  if(!appState.verified){ showModal("Attendance not verified."); return; }
+  initSignature();
+  showStep(2);
+});
+
+/* -------------------------
+   Signature
+------------------------- */
+let sigPad;
+function initSignature(){
+  if(!sigPad){
+    sigPad = new SignaturePad(sigCanvas, { backgroundColor: 'rgba(255,255,255,0)', penColor: 'rgb(10,10,10)' });
+  }
+  sigPad.clear();
+}
+document.getElementById('clearSig').addEventListener('click', ()=> sigPad && sigPad.clear());
+document.getElementById('confirmSig').addEventListener('click', ()=>{
+  if(!sigPad || sigPad.isEmpty()){ showModal("Please provide your signature."); return; }
+  appState.signatureDataUrl = sigPad.toDataURL();
+  showModal("Signature saved");
+  renderResolutions();
+  showStep(3);
+});
+
+/* -------------------------
+   Voting
+------------------------- */
+function renderResolutions(){
+  resolutionsList.innerHTML = '';
+  appState.votes = {};
+  appState.resolutions.forEach(r=>{
+    const div = document.createElement('div');
+    div.className = 'vote-card';
+    div.innerHTML = `
+      <div style="max-width:70%">
+        <div style="font-weight:700">${r.title}</div>
+        <div class="small muted">${r.type}</div>
+      </div>
+      <div class="vote-options">
+        <button class="vote-btn" data-res="${r.id}" data-val="agree">Agree</button>
+        <button class="vote-btn" data-res="${r.id}" data-val="against">Against</button>
+      </div>
+    `;
+    resolutionsList.appendChild(div);
+  });
+  document.querySelectorAll('.vote-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const res = btn.getAttribute('data-res');
+      const val = btn.getAttribute('data-val');
+      appState.votes[res] = val;
+      document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b=>b.classList.remove('selected'));
+      document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b=>b.classList.add('selected'));
+      validateAllVotes();
+    });
+  });
+  document.getElementById('submitVotes').disabled = true;
+}
+
+function validateAllVotes(){
+  const total = appState.resolutions.length;
+  const selected = Object.keys(appState.votes).length;
+  document.getElementById('submitVotes').disabled = selected !== total;
+}
+
+document.getElementById('backFromVoting').addEventListener('click', ()=> showStep(2));
+document.getElementById('submitVotes').addEventListener('click', ()=>{
+  renderSummary();
+  showStep(4);
+});
+
+/* -------------------------
+   Summary + PDF
+------------------------- */
+function renderSummary(){
+  const su = appState.user || { name: icInput.value || '-', role: roleSelect.value || '-', unit: unitInput.value || '-' };
+  const summaryArea = document.getElementById('summaryArea');
+  let html = `<div style="font-weight:700;margin-bottom:8px">${su.name}</div>`;
+  html += `<div class="small muted">Role: ${su.role || '-' } • Unit: ${su.unit || '-'}</div>`;
+  html += `<hr style="margin:10px 0;border:none;border-top:1px solid #eef4ff">`;
+  html += `<div style="font-weight:700;margin-bottom:6px">Votes</div>`;
+  appState.resolutions.forEach(r=>{
+    html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #f1f6ff"><div>${r.title}</div><div style="font-weight:700">${appState.votes[r.id] || 'No Vote'}</div></div>`;
+  });
+  html += `<div style="margin-top:10px"><img id="sigPreview" style="max-width:100%;border-radius:6px;border:1px solid #eef6ff" src="${appState.signatureDataUrl || ''}" alt="signature" /></div>`;
+  summaryArea.innerHTML = html;
+}
+
+document.getElementById('backFromSummary').addEventListener('click', ()=> showStep(3));
+
+document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  let y = 50;
+  doc.setFontSize(16); doc.setTextColor('#0b66d0');
+  doc.text('AGM Attendance & Voting Summary', 40, y);
+  y += 28;
+  doc.setFontSize(11); doc.setTextColor('#222');
+  const su = appState.user || { name: icInput.value || '-', role: roleSelect.value || '-', unit: unitInput.value || '-' };
+  doc.text(`Name: ${su.name}`, 40, y); y+=18;
+  doc.text(`Role: ${su.role}`, 40, y); y+=18;
+  doc.text(`Unit: ${su.unit}`, 40, y); y+=22;
+  doc.text('Votes:', 40, y); y+=14;
+  appState.resolutions.forEach(r=>{
+    doc.text(`- ${r.title}: ${appState.votes[r.id] || 'No Vote'}`, 48, y); y+=16;
+  });
+  if(appState.signatureDataUrl){
+    doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
+  }
+  doc.save(`AGM_Summary_${(su.name||'user').replace(/\s+/g,'_')}.pdf`);
+});
+
+/* -------------------------
+   Boot
+------------------------- */
+async function boot(){
+  resetSidebar();
+  showStep(1);
+  await loadRegisteredUsers(); // ✅ Load users from Google Sheet
+}
+boot();
+
+
+/* -------------------------
+   QR SCANNER INIT
+------------------------- */
+function initQrScanner() {
+  const qrRegionId = "qr-reader";
+
+  // Make sure the element exists
+  const qrReaderEl = document.getElementById(qrRegionId);
+  if (!qrReaderEl) return;
+
+  // Create new QR code scanner instance
+  const html5QrCode = new Html5Qrcode(qrRegionId);
+
+  // Start the camera and listen for scans
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      const camId = cameras[0].id; // use first available camera
+      html5QrCode.start(
+        camId,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        (decodedText) => {
+          // When QR detected, put value into IC field
+          console.log("✅ QR Detected:", decodedText);
+          document.getElementById('icInput').value = decodedText;
+          document.getElementById('qr-loading').textContent = "QR detected!";
+          html5QrCode.stop();
+        },
+        (errorMsg) => {
+          // ignore decode errors for smoother scanning
+        }
+      ).catch(err => {
+        console.error("Camera start failed:", err);
+        document.getElementById('qr-loading').textContent = "Failed to start camera. Please check browser permissions.";
+      });
+    } else {
+      document.getElementById('qr-loading').textContent = "No camera found.";
+    }
+  }).catch(err => {
+    console.error("Camera error:", err);
+    document.getElementById('qr-loading').textContent = "Unable to access camera.";
+  });
+}
+
+// ✅ Start scanner once the page is ready
+window.addEventListener("load", initQrScanner);
+  </script>
+</body>
+</html>
