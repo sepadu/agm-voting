@@ -508,27 +508,33 @@ canvas {
    App state
 ------------------------- */
 const appState = {
-  resolutions: [
-    { id: 'res1', title: 'Approval of previous minutes' },
-    { id: 'res2', title: 'Appointment of auditor' },
-    // Add more here dynamically
-  ],
-  votes: {},
+  step: 1,
+  verified: false,
   user: null,
-  signatureDataUrl: null
+  signatureDataUrl: null,
+  votes: {},
+  resolutions: [
+    { id: 'res1', title: 'Approval of previous minutes', type: 'Ordinary (50%)' },
+    { id: 'res2', title: 'Appointment of auditor', type: 'Special (2/3)' },
+  ],
+  registeredUsers: [] // fetched from Participants tab
 };
 
-// Your Google Apps Script Web App URL
+/* -------------------------
+   Google Sheets API URLs
+------------------------- */
 const SHEET_API = "https://script.google.com/macros/s/AKfycbyTt5iBRhHGaFuGX4N206NdYUrsxrlrAyQ8siskJ1lzkiPb3282DFZL7eGRDoSM5F7BQg/exec";
 
-/* DOM refs */
-const stepIndicators = [1,2,3,4].map(i => document.getElementById('stepIndicator'+i));
+/* -------------------------
+   DOM References
+------------------------- */
 const stepEls = {
   1: document.getElementById('step-1'),
   2: document.getElementById('step-2'),
   3: document.getElementById('step-3'),
   4: document.getElementById('step-4'),
 };
+
 const nextBtn = document.getElementById('nextFromAttendance');
 const confirmManualBtn = document.getElementById('confirmManual');
 const attStatusEl = document.getElementById('attStatus');
@@ -545,7 +551,7 @@ const modalRoot = document.getElementById('modalRoot');
 const modalContent = document.getElementById('modalContent');
 
 /* -------------------------
-   Modal helpers
+   Modal Helpers
 ------------------------- */
 function showModal(msg){
   modalContent.innerHTML = `<div style="font-weight:700">${msg}</div>`;
@@ -555,17 +561,20 @@ function closeModal(){ modalRoot.classList.add('hide'); }
 window.closeModal = closeModal;
 
 /* -------------------------
-   Step navigation
+   Step Navigation
 ------------------------- */
 function showStep(n){
   appState.step = n;
   Object.values(stepEls).forEach(el => el.classList.add('hide'));
   stepEls[n].classList.remove('hide');
   document.querySelectorAll('.dot').forEach((dot, idx) => {
-  dot.classList.toggle('active', (idx + 1) <= n);
-});
+    dot.classList.toggle('active', (idx + 1) <= n);
+  });
 }
 
+/* -------------------------
+   Status / Sidebar
+------------------------- */
 function setStatus(ok, text){
   attStatusEl.classList.remove('hide','ok','fail');
   attStatusEl.classList.toggle('ok', ok);
@@ -581,7 +590,7 @@ function resetSidebar(){
 }
 
 /* -------------------------
-   Load registered users from Google Sheet
+   Load Participants from Sheet
 ------------------------- */
 async function loadRegisteredUsers(){
   try {
@@ -590,16 +599,15 @@ async function loadRegisteredUsers(){
     const data = await res.json();
 
     if (!Array.isArray(data) || !data.length) {
-      console.warn("⚠️ No data found in Google Sheet:", data);
-      showModal("No participants found in the Sheet. Please check your tab name 'Participants' and columns.");
+      showModal("No participants found in the Sheet. Please check the 'Participants' tab.");
       return;
     }
 
     appState.registeredUsers = data;
-    console.log("✅ Loaded users from Google Sheet:", data);
+    console.log("✅ Loaded participants:", data);
   } catch (err) {
-    console.error("❌ Failed to load sheet data:", err);
-    showModal("Unable to connect to Google Sheet. Please check script permissions or deployment access.");
+    console.error("❌ Failed to load participants:", err);
+    showModal("Unable to connect to Google Sheet. Please check script permissions.");
   }
 }
 
@@ -621,68 +629,42 @@ function updateAfterVerify(ok, msg){
   }
 }
 
-// Manual verify button
 confirmManualBtn.addEventListener('click', () => {
-  const ic = icInput.value.trim();
-  const role = roleSelect.value.trim();
-  const unit = unitInput.value.trim();
+  const ic = icInput.value.trim().toLowerCase();
+  const role = roleSelect.value.trim().toLowerCase();
+  const unit = unitInput.value.trim().toLowerCase();
 
-  if (!ic) {
-    showModal("Please enter IC / Passport");
-    return;
-  }
+  if(!ic){ showModal("Please enter IC / Passport"); return; }
+  if(!role){ showModal("⚠️ Please select your role"); return; }
 
-  if (!role) {
-    showModal("⚠️ Please select your role before verifying.");
-    return;
-  }
+  const found = appState.registeredUsers.find(u => String(u.ID||'').trim().toLowerCase() === ic);
 
-  const found = appState.registeredUsers.find(u => {
-    const uid = String(u.id || '').trim();
-    const input = String(ic).trim();
-    return uid === input; // ✅ exact match only
-  });
+  if(found){
+    const roleMatch = found.Role.toLowerCase() === role;
+    const unitMatch = !unit || (found.Unit || '').toLowerCase() === unit;
 
-  if (found) {
-    const sheetRole = String(found.role || '').trim().toLowerCase();
-    const inputRole = String(role || '').trim().toLowerCase();
-    const sheetUnit = String(found.unit || '').trim().toLowerCase();
-    const inputUnit = String(unit || '').trim().toLowerCase();
-
-    const roleMatch =
-      (sheetRole.includes('proxy') && inputRole === 'proxy') ||
-      (sheetRole.includes('owner') && inputRole === 'owner');
-
-    const unitMatch = !inputUnit || sheetUnit === inputUnit;
-
-    if (roleMatch && unitMatch) {
+    if(roleMatch && unitMatch){
       appState.verified = true;
       appState.user = { ...found };
-      if (!unit) unitInput.value = found.unit;
+      if(!unit) unitInput.value = found.Unit;
       updateAfterVerify(true, "Manual verification completed ✅");
       showModal("Manual verification completed ✅");
-	  
-	  
-	  // ✅ Reset the form fields after successful verification
-document.getElementById('icInput').value = '';          // Clear IC/Passport input
-document.getElementById('roleSelect').selectedIndex = 0; // Reset dropdown to "Please choose role"
-document.getElementById('unitInput').value = '';         // Clear unit (if exists)
+      icInput.value = ''; roleSelect.selectedIndex=0; unitInput.value='';
     } else {
       appState.verified = false;
       appState.user = { ...found, role, unit };
-      updateAfterVerify(false, "Record found but role/unit does not match ❌");
-      showModal(`Found record for ${found.name}, but role or unit doesn't match.`);
+      updateAfterVerify(false, "Role/unit does not match ❌");
+      showModal(`Record found for ${found.Name}, but role/unit doesn't match.`);
     }
   } else {
     appState.verified = false;
     appState.user = { name: ic, role, unit };
-    updateAfterVerify(false, "Invalid QR / ID. Not registered ❌");
-    showModal("Invalid QR / ID. Not registered ❌");
+    updateAfterVerify(false, "Invalid IC / ID. Not registered ❌");
+    showModal("Invalid IC / ID. Not registered ❌");
   }
 });
 
-// Next from attendance
-nextBtn.addEventListener('click', ()=>{
+nextBtn.addEventListener('click', ()=> {
   if(!appState.verified){ showModal("Attendance not verified."); return; }
   initSignature();
   showStep(2);
@@ -699,10 +681,10 @@ function initSignature(){
   sigPad.clear();
 }
 document.getElementById('clearSig').addEventListener('click', ()=> sigPad && sigPad.clear());
-document.getElementById('confirmSig').addEventListener('click', ()=>{
+document.getElementById('confirmSig').addEventListener('click', ()=> {
   if(!sigPad || sigPad.isEmpty()){ showModal("Please provide your signature."); return; }
   appState.signatureDataUrl = sigPad.toDataURL();
-  showModal("Signature saved");
+  showModal("Signature saved ✅");
   renderResolutions();
   showStep(3);
 });
@@ -711,33 +693,35 @@ document.getElementById('confirmSig').addEventListener('click', ()=>{
    Voting
 ------------------------- */
 function renderResolutions(){
-  const container = document.getElementById('resolutionsList');
-  container.innerHTML = '';
+  resolutionsList.innerHTML = '';
   appState.votes = {};
-  
   appState.resolutions.forEach(r => {
     const div = document.createElement('div');
     div.className = 'vote-card';
     div.innerHTML = `
-      <div style="max-width:70%"><strong>${r.title}</strong></div>
+      <div style="max-width:70%">
+        <div style="font-weight:700">${r.title}</div>
+        <div class="small muted">${r.type}</div>
+      </div>
       <div class="vote-options">
         <button class="vote-btn" data-res="${r.id}" data-val="agree">Agree</button>
         <button class="vote-btn" data-res="${r.id}" data-val="against">Against</button>
       </div>
     `;
-    container.appendChild(div);
+    resolutionsList.appendChild(div);
   });
 
-  document.querySelectorAll('.vote-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const res = btn.dataset.res;
-      const val = btn.dataset.val;
+  document.querySelectorAll('.vote-btn').forEach(btn => {
+    btn.addEventListener('click', ()=> {
+      const res = btn.getAttribute('data-res');
+      const val = btn.getAttribute('data-val');
       appState.votes[res] = val;
-      document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b=>b.classList.remove('selected'));
-      document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b=>b.classList.add('selected'));
-      document.getElementById('submitVotes').disabled = Object.keys(appState.votes).length !== appState.resolutions.length;
+      document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b => b.classList.add('selected'));
+      validateAllVotes();
     });
   });
+  document.getElementById('submitVotes').disabled = true;
 }
 
 function validateAllVotes(){
@@ -747,22 +731,55 @@ function validateAllVotes(){
 }
 
 document.getElementById('backFromVoting').addEventListener('click', ()=> showStep(2));
-document.getElementById('submitVotes').addEventListener('click', ()=>{
+
+document.getElementById('submitVotes').addEventListener('click', ()=> {
   renderSummary();
   showStep(4);
+  saveSubmissionToSheet(); // Save to Submissions tab
 });
+
+/* -------------------------
+   Save to Google Sheet
+------------------------- */
+function saveSubmissionToSheet(){
+  if(!appState.user){ showModal("No user data to save."); return; }
+
+  const payload = {
+    id: appState.user.ID || appState.user.name,
+    name: appState.user.Name || appState.user.name,
+    role: appState.user.Role || appState.user.role,
+    unit: appState.user.Unit || appState.user.unit,
+    signature: appState.signatureDataUrl,
+    votes: appState.votes
+  };
+
+  fetch(SHEET_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })
+  .then(res => res.json())
+  .then(data => {
+    console.log("Submission saved:", data);
+    showModal("Your responses have been saved successfully ✅");
+  })
+  .catch(err => {
+    console.error("Failed to save submission:", err);
+    showModal("⚠️ Failed to save. Please try again.");
+  });
+}
 
 /* -------------------------
    Summary + PDF
 ------------------------- */
 function renderSummary(){
-  const su = appState.user || { name: icInput.value || '-', role: roleSelect.value || '-', unit: unitInput.value || '-' };
+  const su = appState.user || {};
   const summaryArea = document.getElementById('summaryArea');
-  let html = `<div style="font-weight:700;margin-bottom:8px">${su.name}</div>`;
-  html += `<div class="small muted">Role: ${su.role || '-' } • Unit: ${su.unit || '-'}</div>`;
+  let html = `<div style="font-weight:700;margin-bottom:8px">${su.name || '-'}</div>`;
+  html += `<div class="small muted">Role: ${su.role || su.Role || '-'} • Unit: ${su.unit || su.Unit || '-'}</div>`;
   html += `<hr style="margin:10px 0;border:none;border-top:1px solid #eef4ff">`;
   html += `<div style="font-weight:700;margin-bottom:6px">Votes</div>`;
-  appState.resolutions.forEach(r=>{
+  appState.resolutions.forEach(r => {
     html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #f1f6ff"><div>${r.title}</div><div style="font-weight:700">${appState.votes[r.id] || 'No Vote'}</div></div>`;
   });
   html += `<div style="margin-top:10px"><img id="sigPreview" style="max-width:100%;border-radius:6px;border:1px solid #eef6ff" src="${appState.signatureDataUrl || ''}" alt="signature" /></div>`;
@@ -779,10 +796,10 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
   doc.text('AGM Attendance & Voting Summary', 40, y);
   y += 28;
   doc.setFontSize(11); doc.setTextColor('#222');
-  const su = appState.user || { name: icInput.value || '-', role: roleSelect.value || '-', unit: unitInput.value || '-' };
-  doc.text(`Name: ${su.name}`, 40, y); y+=18;
-  doc.text(`Role: ${su.role}`, 40, y); y+=18;
-  doc.text(`Unit: ${su.unit}`, 40, y); y+=22;
+  const su = appState.user || {};
+  doc.text(`Name: ${su.name || su.Name || '-'}`, 40, y); y+=18;
+  doc.text(`Role: ${su.role || su.Role || '-'}`, 40, y); y+=18;
+  doc.text(`Unit: ${su.unit || su.Unit || '-'}`, 40, y); y+=22;
   doc.text('Votes:', 40, y); y+=14;
   appState.resolutions.forEach(r=>{
     doc.text(`- ${r.title}: ${appState.votes[r.id] || 'No Vote'}`, 48, y); y+=16;
@@ -790,7 +807,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
   if(appState.signatureDataUrl){
     doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
   }
-  doc.save(`AGM_Summary_${(su.name||'user').replace(/\s+/g,'_')}.pdf`);
+  doc.save(`AGM_Summary_${(su.name||su.Name||'user').replace(/\s+/g,'_')}.pdf`);
 });
 
 /* -------------------------
@@ -799,9 +816,10 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
 async function boot(){
   resetSidebar();
   showStep(1);
-  await loadRegisteredUsers(); // ✅ Load users from Google Sheet
+  await loadRegisteredUsers();
 }
 boot();
+
 
 
 /* -------------------------
@@ -826,5 +844,3 @@ window.addEventListener("DOMContentLoaded", () => {
   </script>
 </body>
 </html>
-
-
