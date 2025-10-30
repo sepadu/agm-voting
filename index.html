@@ -863,6 +863,41 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=> {
   });
 });
 
+
+function saveSubmissionToSheet() {
+  if (!appState.user) {
+    showModal("No user to save ❌");
+    return;
+  }
+
+  const payload = {
+    id: appState.user.ID || appState.user.id || '',
+    name: appState.user.Name || appState.user.name || '',
+    role: appState.user.Role || appState.user.role || '',
+    unit: appState.user.Unit || appState.user.unit || '',
+    votes: appState.votes || {},
+    signature: appState.signatureDataUrl || ''
+  };
+
+  fetch('https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec', {
+    method: 'POST',
+    mode: 'no-cors', // bypass CORS restrictions
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(() => {
+    showModal("Saved successfully ✅");
+  })
+  .catch(err => {
+    showModal("Save failed ❌");
+    console.error(err);
+  });
+}
+
+
+
 /* -------------------------
    Boot
 ------------------------- */
