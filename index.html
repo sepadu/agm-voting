@@ -836,7 +836,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
 
 function saveSubmissionToSheet() {
   if (!appState.user) {
-    showModal("No user data to save.");
+    showModal("No user to save ❌");
     return;
   }
 
@@ -849,27 +849,20 @@ function saveSubmissionToSheet() {
     signature: appState.signatureDataUrl || ''
   };
 
-  // Replace with your deployed Apps Script Web App URL
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec";
-
-  fetch(SCRIPT_URL, {
-    method: "POST",
+  fetch('https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec', {
+    method: 'POST',
+    mode: 'no-cors', // bypass CORS restrictions
     headers: {
-      "Content-Type": "application/json"
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
   })
-  .then(res => res.json())
-  .then(res => {
-    if (res.status === 'ok') {
-      showModal("Submission saved successfully ✅");
-    } else {
-      showModal("Save failed ❌: " + (res.message || ''));
-    }
+  .then(() => {
+    showModal("Saved successfully ✅");
   })
   .catch(err => {
+    showModal("Save failed ❌");
     console.error(err);
-    showModal("Save failed ❌: " + err.message);
   });
 }
 
