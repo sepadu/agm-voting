@@ -776,41 +776,7 @@ document.getElementById('submitVotes').addEventListener('click', () => {
 });
 
 
-// Convert PDF Blob → Base64
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
 
-async function submitForm() {
-  const pdfBlob = await generatePdf(); // your existing PDF export function
-  const pdfBase64 = await blobToBase64(pdfBlob);
-
-  const payload = {
-    id: document.getElementById("id").value,
-    name: document.getElementById("name").value,
-    role: document.getElementById("role").value,
-    unit: document.getElementById("unit").value,
-    signature: signaturePad.toDataURL("image/png"), // KEEP as text
-    pdf: pdfBase64 // ✅ send PDF
-  };
-
-  fetch("https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    headers: { "Content-Type": "application/json" }
-  })
-    .then(r => r.json())
-    .then(res => {
-      alert("Submission Successful!");
-      console.log(res);
-    })
-    .catch(console.error);
-}
 
 
 
@@ -841,7 +807,7 @@ function renderSummary(){
 
 document.getElementById('backFromSummary').addEventListener('click', ()=> showStep(3));
 
-document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
+document.getElementById('exportPdfBtn').addEventListener('click', async ()=> {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   let y = 50;
@@ -869,41 +835,34 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
     doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
   }
 
-  doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
-});
+  // ✅ Convert PDF → Base64
+  const pdfBase64 = btoa(doc.output());
 
-
-function saveSubmissionToSheet() {
-  if (!appState.user) {
-    showModal("No user to save ❌");
-    return;
-  }
-
+  // ✅ Prepare payload
   const payload = {
-    id: appState.user.ID || appState.user.id || '',
-    name: appState.user.Name || appState.user.name || '',
-    role: appState.user.Role || appState.user.role || '',
-    unit: appState.user.Unit || appState.user.unit || '',
+    id: su.ID || '',
+    name: su.Name || '',
+    role: su.Role || '',
+    unit: su.Unit || '',
     votes: appState.votes || {},
-    signature: appState.signatureDataUrl || ''
+    signature: appState.signatureDataUrl || '',
+    pdfBase64: pdfBase64
   };
 
-  fetch('https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec', {
-    method: 'POST',
-    mode: 'no-cors', // bypass CORS restrictions
-    headers: {
-      'Content-Type': 'application/json'
-    },
+  // ✅ Send to Google Script
+  fetch("https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })
-  .then(() => {
-    showModal("Saved successfully ✅");
-  })
-  .catch(err => {
-    showModal("Save failed ❌");
+  }).then(() => {
+    showModal("✅ Saved + PDF Uploaded!");
+    doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
+  }).catch(err => {
+    showModal("❌ PDF upload failed");
     console.error(err);
   });
-}
+});
+
 
 
 
