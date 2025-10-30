@@ -743,25 +743,42 @@ function validateAllVotes(){
 
 document.getElementById('backFromVoting').addEventListener('click', ()=> showStep(2));
 
-document.getElementById('submitVotes').addEventListener('click', ()=> {
+document.getElementById('submitVotes').addEventListener('click', () => {
+  const total = appState.resolutions.length;
+  const selected = Object.keys(appState.votes).length;
+  
+  if (selected !== total) {
+    showModal("Please answer all resolutions before submitting.");
+    return;
+  }
+
+  // Render summary
   renderSummary();
+
+  // Move to summary step
   showStep(4);
-  saveSubmissionToSheet(); // Save to Submissions tab
+
+  // Save submission to Google Sheet
+  saveSubmissionToSheet();
 });
 
 /* -------------------------
    Save to Google Sheet
 ------------------------- */
-function saveSubmissionToSheet(){
-  if(!appState.user){ showModal("No user data to save."); return; }
+function saveSubmissionToSheet() {
+  if (!appState.user) {
+    showModal("No user data to save.");
+    return;
+  }
 
   const payload = {
-    id: appState.user.ID || appState.user.name,
-    name: appState.user.Name || appState.user.name,
-    role: appState.user.Role || appState.user.role,
-    unit: appState.user.Unit || appState.user.unit,
-    signature: appState.signatureDataUrl,
-    votes: appState.votes
+    type: "submission", // Important: indicate type for Apps Script
+    id: appState.user.ID || appState.user.Name || appState.user.name || '',
+    name: appState.user.Name || appState.user.name || '',
+    role: appState.user.Role || appState.user.role || '',
+    unit: appState.user.Unit || appState.user.unit || '',
+    signature: appState.signatureDataUrl || '',
+    votes: appState.votes || {}
   };
 
   fetch(SHEET_API, {
@@ -769,8 +786,9 @@ function saveSubmissionToSheet(){
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   })
-  .then(res => res.json())
-  .then(data => {
+  .then(async res => {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
     console.log("Submission saved:", data);
     showModal("Your responses have been saved successfully ✅");
   })
