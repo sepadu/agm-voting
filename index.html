@@ -523,7 +523,7 @@ const appState = {
 /* -------------------------
    Google Sheets API URLs
 ------------------------- */
-const SHEET_API = "https://script.google.com/macros/s/AKfycbyTt5iBRhHGaFuGX4N206NdYUrsxrlrAyQ8siskJ1lzkiPb3282DFZL7eGRDoSM5F7BQg/exec";
+const SHEET_API = "https://script.google.com/macros/s/AKfycbyn6uujRB_69m99N8D6ANfNmVAbBtZ3Te-k-JjVBzrGBrNZlVjJoj07iNDou-HFX-q7/exec";
 
 /* -------------------------
    DOM References
@@ -617,10 +617,10 @@ async function loadRegisteredUsers(){
 function updateAfterVerify(ok, msg){
   if(ok){
     setStatus(true, msg);
-    sidebarInfo.textContent = `${appState.user.name} — ${appState.user.unit}`;
-    sideName.textContent = appState.user.name;
-    sideRole.textContent = appState.user.role;
-    sideUnit.textContent = appState.user.unit;
+    sidebarInfo.textContent = `${appState.user.Name} — ${appState.user.Unit}`;
+    sideName.textContent = appState.user.Name;
+    sideRole.textContent = appState.user.Role;
+    sideUnit.textContent = appState.user.Unit;
     nextBtn.disabled = false;
   } else {
     setStatus(false, msg);
@@ -640,16 +640,26 @@ confirmManualBtn.addEventListener('click', () => {
   const found = appState.registeredUsers.find(u => String(u.ID||'').trim().toLowerCase() === ic);
 
   if(found){
-    const roleMatch = found.Role.toLowerCase() === role;
+    const roleMatch = (found.Role || '').toLowerCase() === role;
     const unitMatch = !unit || (found.Unit || '').toLowerCase() === unit;
 
     if(roleMatch && unitMatch){
       appState.verified = true;
-      appState.user = { ...found };
+      // Map exact column names from the sheet
+      appState.user = { 
+        ID: found.ID,
+        Name: found.Name,
+        Role: found.Role,
+        Unit: found.Unit
+      };
       if(!unit) unitInput.value = found.Unit;
       updateAfterVerify(true, "Manual verification completed ✅");
       showModal("Manual verification completed ✅");
-      icInput.value = ''; roleSelect.selectedIndex=0; unitInput.value='';
+
+      // Reset inputs
+      icInput.value = '';
+      roleSelect.selectedIndex = 0;
+      unitInput.value = '';
     } else {
       appState.verified = false;
       appState.user = { ...found, role, unit };
@@ -658,7 +668,7 @@ confirmManualBtn.addEventListener('click', () => {
     }
   } else {
     appState.verified = false;
-    appState.user = { name: ic, role, unit };
+    appState.user = { Name: ic, Role: role, Unit: unit };
     updateAfterVerify(false, "Invalid IC / ID. Not registered ❌");
     showModal("Invalid IC / ID. Not registered ❌");
   }
@@ -669,6 +679,7 @@ nextBtn.addEventListener('click', ()=> {
   initSignature();
   showStep(2);
 });
+
 
 /* -------------------------
    Signature
