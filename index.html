@@ -835,8 +835,12 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=> {
     doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
   }
 
-  // ✅ Convert PDF → Base64
-  const pdfBase64 = btoa(doc.output());
+ // ✅ Convert PDF to Base64 proper way for Google Apps Script
+const pdfOutput = doc.output('arraybuffer');
+const pdfBase64 = btoa(
+  new Uint8Array(pdfOutput)
+    .reduce((data, byte) => data + String.fromCharCode(byte), '')
+);
 
   // ✅ Prepare payload
   const payload = {
