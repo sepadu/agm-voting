@@ -822,6 +822,35 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
   doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
 });
 
+
+function saveSubmissionToSheet() {
+  const payload = {
+    id: appState.user.ID,
+    name: appState.user.Name,
+    role: appState.user.Role,
+    unit: appState.user.Unit,
+    votes: appState.votes,
+    signature: appState.signatureDataUrl || ''
+  };
+
+  fetch('https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.status === 'ok') {
+      showModal('✅ Submission saved successfully!');
+    } else {
+      showModal('❌ Save failed: ' + data.message);
+    }
+  })
+  .catch(err => showModal('❌ Save failed: ' + err.message));
+}
+
+
+
 /* -------------------------
    Boot
 ------------------------- */
