@@ -517,24 +517,20 @@ const appState = {
     { id: 'res1', title: 'Approval of previous minutes', type: 'Ordinary (50%)' },
     { id: 'res2', title: 'Appointment of auditor', type: 'Special (2/3)' },
   ],
-  registeredUsers: [] // fetched from Participants tab
+  registeredUsers: [] // now fetched from Google Sheets
 };
 
-/* -------------------------
-   Google Sheets API URLs
-------------------------- */
+// Your Google Apps Script Web App URL
 const SHEET_API = "https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec";
 
-/* -------------------------
-   DOM References
-------------------------- */
+/* DOM refs */
+const stepIndicators = [1,2,3,4].map(i => document.getElementById('stepIndicator'+i));
 const stepEls = {
   1: document.getElementById('step-1'),
   2: document.getElementById('step-2'),
   3: document.getElementById('step-3'),
   4: document.getElementById('step-4'),
 };
-
 const nextBtn = document.getElementById('nextFromAttendance');
 const confirmManualBtn = document.getElementById('confirmManual');
 const attStatusEl = document.getElementById('attStatus');
@@ -551,7 +547,7 @@ const modalRoot = document.getElementById('modalRoot');
 const modalContent = document.getElementById('modalContent');
 
 /* -------------------------
-   Modal Helpers
+   Modal helpers
 ------------------------- */
 function showModal(msg){
   modalContent.innerHTML = `<div style="font-weight:700">${msg}</div>`;
@@ -561,20 +557,17 @@ function closeModal(){ modalRoot.classList.add('hide'); }
 window.closeModal = closeModal;
 
 /* -------------------------
-   Step Navigation
+   Step navigation
 ------------------------- */
 function showStep(n){
   appState.step = n;
   Object.values(stepEls).forEach(el => el.classList.add('hide'));
   stepEls[n].classList.remove('hide');
   document.querySelectorAll('.dot').forEach((dot, idx) => {
-    dot.classList.toggle('active', (idx + 1) <= n);
-  });
+  dot.classList.toggle('active', (idx + 1) <= n);
+});
 }
 
-/* -------------------------
-   Status / Sidebar
-------------------------- */
 function setStatus(ok, text){
   attStatusEl.classList.remove('hide','ok','fail');
   attStatusEl.classList.toggle('ok', ok);
@@ -590,7 +583,7 @@ function resetSidebar(){
 }
 
 /* -------------------------
-   Load Participants from Sheet
+   Load registered users from Google Sheet
 ------------------------- */
 async function loadRegisteredUsers(){
   try {
@@ -599,15 +592,16 @@ async function loadRegisteredUsers(){
     const data = await res.json();
 
     if (!Array.isArray(data) || !data.length) {
-      showModal("No participants found in the Sheet. Please check the 'Participants' tab.");
+      console.warn("⚠️ No data found in Google Sheet:", data);
+      showModal("No participants found in the Sheet. Please check your tab name 'Participants' and columns.");
       return;
     }
 
     appState.registeredUsers = data;
-    console.log("✅ Loaded participants:", data);
+    console.log("✅ Loaded users from Google Sheet:", data);
   } catch (err) {
-    console.error("❌ Failed to load participants:", err);
-    showModal("Unable to connect to Google Sheet. Please check script permissions.");
+    console.error("❌ Failed to load sheet data:", err);
+    showModal("Unable to connect to Google Sheet. Please check script permissions or deployment access.");
   }
 }
 
@@ -615,71 +609,95 @@ async function loadRegisteredUsers(){
    Attendance Verification
 ------------------------- */
 function updateAfterVerify(ok, msg){
-  if(ok){
-    setStatus(true, msg);
-    sidebarInfo.textContent = `${appState.user.Name} — ${appState.user.Unit}`;
-    sideName.textContent = appState.user.Name;
-    sideRole.textContent = appState.user.Role;
-    sideUnit.textContent = appState.user.Unit;
-    nextBtn.disabled = false;
-  } else {
-    setStatus(false, msg);
-    resetSidebar();
-    nextBtn.disabled = true;
-  }
+  setStatus(ok, msg);
+
+  // Always update sidebar info using uppercase properties
+  const u = appState.user || {};
+  sidebarInfo.textContent = `${u.Name || '-'} — ${u.Unit || '-'}`;
+  sideName.textContent = u.Name || '-';
+  sideRole.textContent = u.Role || '-';
+  sideUnit.textContent = u.Unit || '-';
+
+  nextBtn.disabled = !ok; // only enable next if verification ok
 }
 
+// Manual verify button
 confirmManualBtn.addEventListener('click', () => {
-  const ic = icInput.value.trim().toLowerCase();
-  const role = roleSelect.value.trim().toLowerCase();
-  const unit = unitInput.value.trim().toLowerCase();
+  const ic = icInput.value.trim();
+  const role = roleSelect.value.trim();
+  const unit = unitInput.value.trim();
 
-  if(!ic){ showModal("Please enter IC / Passport"); return; }
-  if(!role){ showModal("⚠️ Please select your role"); return; }
+  if (!ic) {
+    showModal("Please enter IC / Passport");
+    return;
+  }
 
-  const found = appState.registeredUsers.find(u => String(u.ID||'').trim().toLowerCase() === ic);
+  if (!role) {
+    showModal("⚠️ Please select your role before verifying.");
+    return;
+  }
 
-  if(found){
-    const roleMatch = (found.Role || '').toLowerCase() === role;
-    const unitMatch = !unit || (found.Unit || '').toLowerCase() === unit;
+  const found = appState.registeredUsers.find(u => {
+    const uid = String(u.ID || '').trim(); // ✅ match sheet column exactly
+    return uid === ic; // exact match
+  });
 
-    if(roleMatch && unitMatch){
+  if (found) {
+    const sheetRole = String(found.Role || '').trim().toLowerCase();
+    const inputRole = role.toLowerCase();
+    const sheetUnit = String(found.Unit || '').trim().toLowerCase();
+    const inputUnit = unit.toLowerCase();
+
+    const roleMatch =
+      (sheetRole.includes('proxy') && inputRole === 'proxy') ||
+      (sheetRole.includes('owner') && inputRole === 'owner');
+
+    const unitMatch = !inputUnit || sheetUnit === inputUnit;
+
+    if (roleMatch && unitMatch) {
+      // ✅ Successful verification
       appState.verified = true;
-      // Map exact column names from the sheet
-      appState.user = { 
-        ID: found.ID,
-        Name: found.Name,
-        Role: found.Role,
-        Unit: found.Unit
-      };
-      if(!unit) unitInput.value = found.Unit;
+      appState.user = { ...found }; // keep ID, Name, Role, Unit from sheet
+      if (!unit) unitInput.value = found.Unit; // autofill unit if empty
       updateAfterVerify(true, "Manual verification completed ✅");
       showModal("Manual verification completed ✅");
 
-      // Reset inputs
+      // ✅ Reset input fields
       icInput.value = '';
       roleSelect.selectedIndex = 0;
       unitInput.value = '';
     } else {
+      // ❌ Role/unit mismatch
       appState.verified = false;
-      appState.user = { ...found, role, unit };
-      updateAfterVerify(false, "Role/unit does not match ❌");
-      showModal(`Record found for ${found.Name}, but role/unit doesn't match.`);
+      appState.user = {
+        ID: found.ID,
+        Name: found.Name,
+        Role: role, // keep uppercase for frontend
+        Unit: unit  // keep uppercase for frontend
+      };
+      updateAfterVerify(false, "Record found but role/unit does not match ❌");
+      showModal(`Found record for ${found.Name}, but role or unit doesn't match.`);
     }
   } else {
+    // ❌ Not registered
     appState.verified = false;
-    appState.user = { Name: ic, Role: role, Unit: unit };
-    updateAfterVerify(false, "Invalid IC / ID. Not registered ❌");
-    showModal("Invalid IC / ID. Not registered ❌");
+    appState.user = { 
+      ID: ic,
+      Name: ic, 
+      Role: role, 
+      Unit: unit 
+    };
+    updateAfterVerify(false, "Invalid QR / ID. Not registered ❌");
+    showModal("Invalid QR / ID. Not registered ❌");
   }
 });
 
-nextBtn.addEventListener('click', ()=> {
+// Next from attendance
+nextBtn.addEventListener('click', ()=>{
   if(!appState.verified){ showModal("Attendance not verified."); return; }
   initSignature();
   showStep(2);
 });
-
 
 /* -------------------------
    Signature
@@ -692,10 +710,10 @@ function initSignature(){
   sigPad.clear();
 }
 document.getElementById('clearSig').addEventListener('click', ()=> sigPad && sigPad.clear());
-document.getElementById('confirmSig').addEventListener('click', ()=> {
+document.getElementById('confirmSig').addEventListener('click', ()=>{
   if(!sigPad || sigPad.isEmpty()){ showModal("Please provide your signature."); return; }
   appState.signatureDataUrl = sigPad.toDataURL();
-  showModal("Signature saved ✅");
+  showModal("Signature saved");
   renderResolutions();
   showStep(3);
 });
@@ -706,7 +724,7 @@ document.getElementById('confirmSig').addEventListener('click', ()=> {
 function renderResolutions(){
   resolutionsList.innerHTML = '';
   appState.votes = {};
-  appState.resolutions.forEach(r => {
+  appState.resolutions.forEach(r=>{
     const div = document.createElement('div');
     div.className = 'vote-card';
     div.innerHTML = `
@@ -721,14 +739,13 @@ function renderResolutions(){
     `;
     resolutionsList.appendChild(div);
   });
-
-  document.querySelectorAll('.vote-btn').forEach(btn => {
-    btn.addEventListener('click', ()=> {
+  document.querySelectorAll('.vote-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
       const res = btn.getAttribute('data-res');
       const val = btn.getAttribute('data-val');
       appState.votes[res] = val;
-      document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b => b.classList.remove('selected'));
-      document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b => b.classList.add('selected'));
+      document.querySelectorAll(`.vote-btn[data-res="${res}"]`).forEach(b=>b.classList.remove('selected'));
+      document.querySelectorAll(`.vote-btn[data-res="${res}"][data-val="${val}"]`).forEach(b=>b.classList.add('selected'));
       validateAllVotes();
     });
   });
@@ -742,76 +759,33 @@ function validateAllVotes(){
 }
 
 document.getElementById('backFromVoting').addEventListener('click', ()=> showStep(2));
-
-document.getElementById('submitVotes').addEventListener('click', () => {
-  const total = appState.resolutions.length;
-  const selected = Object.keys(appState.votes).length;
-  
-  if (selected !== total) {
-    showModal("Please answer all resolutions before submitting.");
-    return;
-  }
-
-  // Render summary
+document.getElementById('submitVotes').addEventListener('click', ()=>{
   renderSummary();
-
-  // Move to summary step
   showStep(4);
-
-  // Save submission to Google Sheet
-  saveSubmissionToSheet();
 });
-
-/* -------------------------
-   Save to Google Sheet
-------------------------- */
-function saveSubmissionToSheet() {
-  if (!appState.user) {
-    showModal("No user data to save.");
-    return;
-  }
-
-  const payload = {
-    type: "submission", // Important: indicate type for Apps Script
-    id: appState.user.ID || appState.user.Name || appState.user.name || '',
-    name: appState.user.Name || appState.user.name || '',
-    role: appState.user.Role || appState.user.role || '',
-    unit: appState.user.Unit || appState.user.unit || '',
-    signature: appState.signatureDataUrl || '',
-    votes: appState.votes || {}
-  };
-
-  fetch(SHEET_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  })
-  .then(async res => {
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    console.log("Submission saved:", data);
-    showModal("Your responses have been saved successfully ✅");
-  })
-  .catch(err => {
-    console.error("Failed to save submission:", err);
-    showModal("⚠️ Failed to save. Please try again.");
-  });
-}
 
 /* -------------------------
    Summary + PDF
 ------------------------- */
 function renderSummary(){
-  const su = appState.user || {};
+  const su = appState.user || { Name: '-', Role: '-', Unit: '-' };
   const summaryArea = document.getElementById('summaryArea');
-  let html = `<div style="font-weight:700;margin-bottom:8px">${su.name || '-'}</div>`;
-  html += `<div class="small muted">Role: ${su.role || su.Role || '-'} • Unit: ${su.unit || su.Unit || '-'}</div>`;
+
+  let html = `<div style="font-weight:700;margin-bottom:8px">${su.Name}</div>`;
+  html += `<div class="small muted">Role: ${su.Role} • Unit: ${su.Unit}</div>`;
   html += `<hr style="margin:10px 0;border:none;border-top:1px solid #eef4ff">`;
   html += `<div style="font-weight:700;margin-bottom:6px">Votes</div>`;
-  appState.resolutions.forEach(r => {
-    html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #f1f6ff"><div>${r.title}</div><div style="font-weight:700">${appState.votes[r.id] || 'No Vote'}</div></div>`;
+
+  appState.resolutions.forEach(r=>{
+    html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #f1f6ff">
+               <div>${r.title}</div>
+               <div style="font-weight:700">${appState.votes[r.id] || 'No Vote'}</div>
+             </div>`;
   });
-  html += `<div style="margin-top:10px"><img id="sigPreview" style="max-width:100%;border-radius:6px;border:1px solid #eef6ff" src="${appState.signatureDataUrl || ''}" alt="signature" /></div>`;
+
+  html += `<div style="margin-top:10px">
+             <img id="sigPreview" style="max-width:100%;border-radius:6px;border:1px solid #eef6ff" src="${appState.signatureDataUrl || ''}" alt="signature" />
+           </div>`;
   summaryArea.innerHTML = html;
 }
 
@@ -821,22 +795,31 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   let y = 50;
-  doc.setFontSize(16); doc.setTextColor('#0b66d0');
+
+  doc.setFontSize(16); 
+  doc.setTextColor('#0b66d0');
   doc.text('AGM Attendance & Voting Summary', 40, y);
   y += 28;
-  doc.setFontSize(11); doc.setTextColor('#222');
-  const su = appState.user || {};
-  doc.text(`Name: ${su.name || su.Name || '-'}`, 40, y); y+=18;
-  doc.text(`Role: ${su.role || su.Role || '-'}`, 40, y); y+=18;
-  doc.text(`Unit: ${su.unit || su.Unit || '-'}`, 40, y); y+=22;
+
+  doc.setFontSize(11); 
+  doc.setTextColor('#222');
+
+  const su = appState.user || { Name: '-', Role: '-', Unit: '-' };
+  doc.text(`Name: ${su.Name}`, 40, y); y+=18;
+  doc.text(`Role: ${su.Role}`, 40, y); y+=18;
+  doc.text(`Unit: ${su.Unit}`, 40, y); y+=22;
+
   doc.text('Votes:', 40, y); y+=14;
   appState.resolutions.forEach(r=>{
-    doc.text(`- ${r.title}: ${appState.votes[r.id] || 'No Vote'}`, 48, y); y+=16;
+    doc.text(`- ${r.title}: ${appState.votes[r.id] || 'No Vote'}`, 48, y); 
+    y+=16;
   });
+
   if(appState.signatureDataUrl){
     doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
   }
-  doc.save(`AGM_Summary_${(su.name||su.Name||'user').replace(/\s+/g,'_')}.pdf`);
+
+  doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
 });
 
 /* -------------------------
@@ -845,10 +828,9 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
 async function boot(){
   resetSidebar();
   showStep(1);
-  await loadRegisteredUsers();
+  await loadRegisteredUsers(); // ✅ Load users from Google Sheet
 }
 boot();
-
 
 
 /* -------------------------
