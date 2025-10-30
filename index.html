@@ -775,11 +775,6 @@ document.getElementById('submitVotes').addEventListener('click', () => {
   saveSubmissionToSheet();
 });
 
-
-
-
-
-
 /* -------------------------
    Summary + PDF
 ------------------------- */
@@ -807,7 +802,7 @@ function renderSummary(){
 
 document.getElementById('backFromSummary').addEventListener('click', ()=> showStep(3));
 
-document.getElementById('exportPdfBtn').addEventListener('click', async ()=> {
+document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   let y = 50;
@@ -835,32 +830,7 @@ document.getElementById('exportPdfBtn').addEventListener('click', async ()=> {
     doc.addImage(appState.signatureDataUrl, 'PNG', 40, y+10, 220, 60);
   }
 
-  // ✅ Convert PDF → Base64
-  const pdfBase64 = btoa(doc.output());
-
-  // ✅ Prepare payload
-  const payload = {
-    id: su.ID || '',
-    name: su.Name || '',
-    role: su.Role || '',
-    unit: su.Unit || '',
-    votes: appState.votes || {},
-    signature: appState.signatureDataUrl || '',
-    pdfBase64: pdfBase64
-  };
-
-  // ✅ Send to Google Script
-  fetch("https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  }).then(() => {
-    showModal("✅ Saved + PDF Uploaded!");
-    doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
-  }).catch(err => {
-    showModal("❌ PDF upload failed");
-    console.error(err);
-  });
+  doc.save(`AGM_Summary_${(su.Name||'user').replace(/\s+/g,'_')}.pdf`);
 });
 
 
@@ -931,4 +901,3 @@ window.addEventListener("DOMContentLoaded", () => {
   </script>
 </body>
 </html>
-
