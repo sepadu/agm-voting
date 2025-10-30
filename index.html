@@ -759,9 +759,20 @@ function validateAllVotes(){
 }
 
 document.getElementById('backFromVoting').addEventListener('click', ()=> showStep(2));
-document.getElementById('submitVotes').addEventListener('click', ()=>{
+document.getElementById('submitVotes').addEventListener('click', () => {
+  const total = appState.resolutions.length;
+  const selected = Object.keys(appState.votes).length;
+
+  if (selected !== total) {
+    showModal("Please answer all resolutions before submitting.");
+    return;
+  }
+
   renderSummary();
   showStep(4);
+
+  // Save to Google Sheet
+  saveSubmissionToSheet();
 });
 
 /* -------------------------
@@ -824,29 +835,42 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=> {
 
 
 function saveSubmissionToSheet() {
+  if (!appState.user) {
+    showModal("No user data to save.");
+    return;
+  }
+
   const payload = {
-    id: appState.user.ID,
-    name: appState.user.Name,
-    role: appState.user.Role,
-    unit: appState.user.Unit,
-    votes: appState.votes,
+    id: appState.user.ID || appState.user.id || '',
+    name: appState.user.Name || appState.user.name || '',
+    role: appState.user.Role || appState.user.role || '',
+    unit: appState.user.Unit || appState.user.unit || '',
+    votes: appState.votes || {},
     signature: appState.signatureDataUrl || ''
   };
 
-  fetch('https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  // Replace with your deployed Apps Script Web App URL
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec";
+
+  fetch(SCRIPT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify(payload)
   })
   .then(res => res.json())
-  .then(data => {
-    if(data.status === 'ok') {
-      showModal('✅ Submission saved successfully!');
+  .then(res => {
+    if (res.status === 'ok') {
+      showModal("Submission saved successfully ✅");
     } else {
-      showModal('❌ Save failed: ' + data.message);
+      showModal("Save failed ❌: " + (res.message || ''));
     }
   })
-  .catch(err => showModal('❌ Save failed: ' + err.message));
+  .catch(err => {
+    console.error(err);
+    showModal("Save failed ❌: " + err.message);
+  });
 }
 
 
