@@ -521,7 +521,7 @@ const appState = {
 };
 
 // Your Google Apps Script Web App URL
-const SHEET_API = "https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec";
+const SHEET_API = "https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec";
 
 /* DOM refs */
 const stepIndicators = [1,2,3,4].map(i => document.getElementById('stepIndicator'+i));
@@ -850,7 +850,7 @@ function saveSubmissionToSheet() {
   };
 
   // Replace with your deployed Apps Script Web App URL
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwGmbhxkLkUKVnkqzTUQCOG3NE9WmhwdUm8IyP31wwo97r9R8tGV6Qcq1zd6J6JLwx1-A/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx5k1y26NpSAQixqDLuiWNY-N0W2CHPvvYsAR3XcJf9AwkEeNVmz1azBLzuZASOeCqa5Q/exec";
 
   fetch(SCRIPT_URL, {
     method: "POST",
